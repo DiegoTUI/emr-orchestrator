@@ -37,6 +37,12 @@ class S3Manager(object):
         theKey.key = remote_file_name
         theKey.set_contents_from_filename(local_file_name, cb=callback, num_cb=1)
 
+    # Deletes all files with prefix
+    def delete_files_with_prefix(self, bucket_name, prefix):
+        bucket = self.get_bucket(bucket_name)
+        keys_to_delete = bucket.list(prefix = prefix)
+        bucket.delete_keys([key.name for key in keys_to_delete])
+
     # Empties the contents of a bucket
     def empty_bucket(self, bucket_name):
         bucket = self.get_bucket(bucket_name)

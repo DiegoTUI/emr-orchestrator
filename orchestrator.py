@@ -6,6 +6,8 @@ import defaults
 from boto.emr.step import StreamingStep
 from aws.s3_manager import S3Manager
 from aws.emr_manager import EmrManager
+from redshift.db_connection import DbConnection
+from psycopg2 import Error
 
 # Logger level
 logging.getLogger().setLevel(logging.INFO)
@@ -13,11 +15,13 @@ logging.getLogger().setLevel(logging.INFO)
 # script to trigger the whole process
 
 # globals
+# S3
 s3_parameters = {
     "access_key": defaults.access_key,
     "secret_key": defaults.secret_key
 }
 s3_manager = S3Manager(s3_parameters)
+# Elastic Mapreduce
 emr_parameters = {
     "region_name": defaults.region_name,
     "access_key": defaults.access_key,
@@ -30,6 +34,16 @@ emr_parameters = {
     "emr_cluster_name": defaults.emr_cluster_name
 }
 emr_manager = EmrManager(emr_parameters)
+# Redshift
+redshift_parameters = {
+    "db_name": defaults.db_name,
+    "db_user": defaults.db_user,
+    "db_password": defaults.db_password,
+    "db_port": defaults.db_port,
+    "db_host": defaults.db_host
+}
+redshift_cursor = DbConnection(redshift_parameters).cursor
+# Mapper
 mapper_uploaded = False
 
 # create s3 bucket
@@ -83,7 +97,84 @@ def terminate_emr_cluster():
     emr_manager.terminate_cluster(defaults.cluster_id)
     logging.info("Cluster terminated: " + defaults.cluster_id)
 
+# create redshift_table
+def create_redshift_table():
+    logging.info("Creating table " + defaults.table_name + " in Redshift")
+    try:
+        redshift_cursor.execute("CREATE TABLE " + defaults.table_name + " \
+            ( \
+              request_date     VARCHAR(10) NOT NULL,\
+              destination      VARCHAR(1000) NOT NULL,\
+              days_advance     INTEGER NOT NULL,\
+              hotels_returned  INTEGER NOT NULL\
+            )")
+        logging.info("Table " + defaults.table_name + " created in Redshift")
+    except Error as error:
+        logging.error("Something went wrong while creating " + defaults.table_name + " table.")
+        logging.error(error.pgerror)
+        logging.error(error.diag.message_detail)
+
 # copy contents of output to Redshift
+def copy_output_to_redshift():
+    logging.info("Copying output into Redshift. This might take time. Check progress in your AWS Console")
+    try:
+        s3_source = "s3://" + defaults.bucket_name + defaults.output_remote_path + "part-"
+        credentials = "CREDENTIALS 'aws_access_key_id=" + defaults.access_key + ";aws_secret_access_key=" + defaults.secret_key + "'"
+        redshift_cursor.execute("COPY " + defaults.table_name + " FROM '" + s3_source + "' " + credentials + " DELIMITER '|' MAXERROR 10")
+    except Error as error:
+        logging.error("Something went wrong while copying data to " + defaults.table_name + " table.")
+        logging.error(error.pgerror)
+        logging.error(error.diag.message_detail)
+
+# vacuum redshift
+def vacuum_redshift():
+    logging.info("Vacuuming database")
+    try:
+        redshift_cursor.execute("vacuum")
+        logging.info("Database vacuumed")
+    except Error as error:
+        logging.error("Something went wrong while vacuuming table.")
+        logging.error(error.pgerror)
+        logging.error(error.diag.message_detail)
+
+# analyze redshift
+def analyze_redshift():
+    logging.info("Analyzing database")
+    try:
+        redshift_cursor.execute("analyze")
+        logging.info("Database analyzed")
+    except Error as error:
+        logging.error("Something went wrong while analyzing database.")
+        logging.error(error.pgerror)
+        logging.error(error.diag.message_detail)
+
+# delete redshift_table
+def delete_redshift_table():
+    logging.info("Deleting contents of table " + defaults.table_name + " in Redshift")
+    try:
+        redshift_cursor.execute("DELETE FROM " + defaults.table_name)
+        logging.info("Contents of table " + defaults.table_name + " deleted in Redshift")
+    except Error as error:
+        logging.error("Something went wrong while deleting " + defaults.table_name + " table.")
+        logging.error(error.pgerror)
+        logging.error(error.diag.message_detail)
+
+# drop redshift_table
+def drop_redshift_table():
+    logging.info("Dropping table " + defaults.table_name + " in Redshift")
+    try:
+        redshift_cursor.execute("DROP TABLE " + defaults.table_name)
+        logging.info("Table " + defaults.table_name + " was removed from Redshift")
+    except Error as error:
+        logging.error("Something went wrong while dropping " + defaults.table_name + " table.")
+        logging.error(error.pgerror)
+        logging.error(error.diag.message_detail)
+
+# deletes output from bucket
+def delete_output_from_bucket():
+    logging.info("Deleting output in bucket: " + defaults.bucket_name)
+    s3_manager.delete_files_with_prefix(defaults.bucket_name, defaults.output_remote_path[1:])
+    logging.info("Output deleted in bucket: " + defaults.bucket_name)
 
 # empty bucket
 def empty_bucket():
@@ -99,7 +190,14 @@ orchestrator = {
     "launch_emr": launch_emr_cluster,
     "mapreduce": run_mapreduce,
     "terminate_emr": terminate_emr_cluster,
-    "empty_bucket": empty_bucket
+    "create_redshift_table": create_redshift_table,
+    "copy_output_to_redshift": copy_output_to_redshift,
+    "delete_redshift_table": delete_redshift_table,
+    "drop_redshift_table": drop_redshift_table,
+    "empty_bucket": empty_bucket,
+    "vacuum_redshift": vacuum_redshift,
+    "analyze_redshift": analyze_redshift,
+    "delete_output": delete_output_from_bucket
 }
 
 if __name__ == '__main__':
