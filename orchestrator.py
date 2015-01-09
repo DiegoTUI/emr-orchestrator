@@ -45,6 +45,8 @@ redshift_parameters = {
 redshift_cursor = DbConnection(redshift_parameters).cursor
 # Mapper
 mapper_uploaded = False
+# Copy to local
+copy_to_local_uploaded = False
 
 # create s3 bucket
 def create_s3_bucket():
@@ -60,6 +62,7 @@ def upload_files_to_s3_bucket():
 
 # upload mapper.py script to s3 bucket
 def upload_mapper_to_s3_bucket():
+    global mapper_uploaded
     logging.info("Uploading mapper script")
     current_folder = os.path.dirname(os.path.realpath(__file__))
     s3_manager.upload_file(defaults.bucket_name, current_folder + "/mapreduce/mapper.py", defaults.scripts_remote_path + defaults.step_mapper_script, _upload_mapper_callback)
@@ -74,22 +77,47 @@ def _upload_mapper_callback(transmitted, total):
     # only called once
     mapper_uploaded = True
 
+# upload copy_to_local.sh script to s3 bucket
+def upload_copy_to_local_to_s3_bucket():
+    global copy_to_local_uploaded
+    logging.info("Uploading copy_to_local script")
+    current_folder = os.path.dirname(os.path.realpath(__file__))
+    s3_manager.upload_file(defaults.bucket_name, current_folder + "/bash/copy_to_local.sh", defaults.scripts_remote_path + defaults.step_copy_to_local_script, _upload_copy_to_local_callback)
+    # wait until finished
+    while not copy_to_local_uploaded:
+        time.sleep(1)
+    logging.info("Copy_to_local script uploaded")
+
+def _upload_copy_to_local_callback(transmitted, total):
+    global copy_to_local_uploaded
+    logging.info("Upload copy_to_local callback. Transmitted: " + str(transmitted) + " - total: " + str(total))
+    # only called once
+    copy_to_local_uploaded = True
+
 # start EMR cluster
 def launch_emr_cluster():
     logging.info("Launching EMR Cluster with name: " + defaults.emr_cluster_name)
     defaults.cluster_id = emr_manager.launch_cluster(defaults.master_type, defaults.slave_type, defaults.num_instances, defaults.ami_version)
     logging.info("EMR Cluster launched: " + defaults.cluster_id)
 
+# run copy_to_local.sh step in EMR cluster
+def run_copy_to_local_step():
+    logging.info("Running copy_to_local step in cluster: " + defaults.cluster_id + "with script path: " + defaults.step_copy_to_local_s3)
+    defaults.step_id = emr_manager.run_scripting_step(name = defaults.step_name,
+                                            cluster_id = defaults.cluster_id,
+                                            script_path = defaults.step_copy_to_local_s3)
+    logging.info("Scripting step " + defaults.step_id + " completed in cluster " + defaults.cluster_id)
+
 # run mapreduce in EMR cluster
 def run_mapreduce():
     logging.info("Running MapReduce step in cluster: " + defaults.cluster_id)
-    defaults.step_id = emr_manager.run_step(name = defaults.step_name,
+    defaults.step_id = emr_manager.run_streaming_step(name = defaults.step_name,
                                             cluster_id = defaults.cluster_id,
                                             mapper_path = defaults.step_mapper,
                                             reducer_path = defaults.step_reducer,
                                             input_path = defaults.step_input,
                                             output_path = defaults.step_output)
-    logging.info("Step " + defaults.step_id + " completed in cluster " + defaults.cluster_id)
+    logging.info("Streaming step " + defaults.step_id + " completed in cluster " + defaults.cluster_id)
 
 # terminate EMR cluster
 def terminate_emr_cluster():
@@ -187,7 +215,9 @@ orchestrator = {
     "create_bucket": create_s3_bucket,
     "upload_files": upload_files_to_s3_bucket,
     "upload_mapper": upload_mapper_to_s3_bucket,
+    "upload_copy_to_local": upload_copy_to_local_to_s3_bucket,
     "launch_emr": launch_emr_cluster,
+    "copy_to_local": run_copy_to_local_step,
     "mapreduce": run_mapreduce,
     "terminate_emr": terminate_emr_cluster,
     "create_redshift_table": create_redshift_table,
