@@ -6,6 +6,7 @@ from boto.emr.bootstrap_action import BootstrapAction
 from boto.regioninfo import RegionInfo
 from boto.emr.step import StreamingStep
 from boto.emr.step import ScriptRunnerStep
+from boto.emr.step import JarStep
  
 #Class for launching an EMR cluster
  
@@ -74,7 +75,7 @@ class EmrManager(object):
             logging.error("Launching EMR cluster failed")
             return "FAILED"
 
-    # add scripting step to cluster
+    # run scripting step in cluster
     def run_scripting_step(self, cluster_id, name, script_path):
         try:
             step = ScriptRunnerStep(name=name, 
@@ -82,10 +83,10 @@ class EmrManager(object):
                                     action_on_failure="CONTINUE")
             return self._run_step(cluster_id, step)
         except:
-            logging.error("Running step in cluster " + cluster_id + " failed.")
+            logging.error("Running scripting step in cluster " + cluster_id + " failed.")
             return "FAILED"
 
-    # add streaming step to cluster
+    # run streaming step in cluster
     def run_streaming_step(self, cluster_id, name, mapper_path, reducer_path, input_path, output_path):
         try:
             # bundle files with the job
@@ -107,7 +108,22 @@ class EmrManager(object):
                                     action_on_failure="CONTINUE")
             return self._run_step(cluster_id, step)            
         except:
-            logging.error("Running step in cluster " + cluster_id + " failed.")
+            logging.error("Running streaming step in cluster " + cluster_id + " failed.")
+            return "FAILED"
+
+    # run mapreduce jar step in cluster
+    def run_jar_step(self, cluster_id, name, jar_path, class_name, input_path, output_path):
+        try:
+            # build streaming step
+            logging.debug("Launching jar step with jar: " + jar_path + " class name: " + class_name + " input: " + input_path + " and output: " + output_path)
+            step = JarStep(name=name,
+                            jar=jar_path, 
+                            step_args= [class_name,
+                                        input_path,
+                                        output_path])
+            return self._run_step(cluster_id, step)            
+        except:
+            logging.error("Running jar step in cluster " + cluster_id + " failed.")
             return "FAILED"
 
     def _run_step(self, cluster_id, step):

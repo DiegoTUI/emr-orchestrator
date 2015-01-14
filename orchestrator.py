@@ -47,6 +47,8 @@ redshift_cursor = DbConnection(redshift_parameters).cursor
 mapper_uploaded = False
 # Copy to local
 copy_to_local_uploaded = False
+# Jar uploaded
+jar_uploaded = False
 
 # create s3 bucket
 def create_s3_bucket():
@@ -76,6 +78,23 @@ def _upload_mapper_callback(transmitted, total):
     logging.info("Upload mapper callback. Transmitted: " + str(transmitted) + " - total: " + str(total))
     # only called once
     mapper_uploaded = True
+
+# upload mr.jar to s3 bucket
+def upload_jar_to_s3_bucket():
+    global jar_uploaded
+    logging.info("Uploading jar file")
+    current_folder = os.path.dirname(os.path.realpath(__file__))
+    s3_manager.upload_file(defaults.bucket_name, current_folder + "/mapreduce/mr.jar", defaults.scripts_remote_path + "mr.jar", _upload_jar_callback)
+    # wait until finished
+    while not jar_uploaded:
+        time.sleep(1)
+    logging.info("Jar uploaded")
+
+def _upload_jar_callback(transmitted, total):
+    global jar_uploaded
+    logging.info("Upload jar callback. Transmitted: " + str(transmitted) + " - total: " + str(total))
+    # only called once
+    jar_uploaded = True
 
 # upload copy_to_local.sh script to s3 bucket
 def upload_copy_to_local_to_s3_bucket():
@@ -110,14 +129,28 @@ def run_copy_to_local_step():
 
 # run mapreduce in EMR cluster
 def run_mapreduce():
-    logging.info("Running MapReduce step in cluster: " + defaults.cluster_id)
-    defaults.step_id = emr_manager.run_streaming_step(name = defaults.step_name,
+    logging.info("Running MapReduce " + defaults.step_type + " step in cluster: " + defaults.cluster_id)
+    run_step = run_streaming_mapreduce
+    if (defaults.step_type == "jar"):
+        run_step = run_jar_mapreduce
+    defaults.step_id = run_step();
+    logging.info(defaults.step_type + " step " + defaults.step_id + " completed in cluster " + defaults.cluster_id)
+
+def run_streaming_mapreduce():
+    return emr_manager.run_streaming_step(name = defaults.step_name,
                                             cluster_id = defaults.cluster_id,
                                             mapper_path = defaults.step_mapper,
                                             reducer_path = defaults.step_reducer,
                                             input_path = defaults.step_input,
                                             output_path = defaults.step_output)
-    logging.info("Streaming step " + defaults.step_id + " completed in cluster " + defaults.cluster_id)
+
+def run_jar_mapreduce():
+    return emr_manager.run_jar_step(name = defaults.step_name,
+                                    cluster_id = defaults.cluster_id,
+                                    jar_path = defaults.step_jar_path,
+                                    class_name = defaults.step_jar_class_name,
+                                    input_path = defaults.step_input,
+                                    output_path = defaults.step_output)
 
 # terminate EMR cluster
 def terminate_emr_cluster():
@@ -216,6 +249,7 @@ orchestrator = {
     "upload_files": upload_files_to_s3_bucket,
     "upload_mapper": upload_mapper_to_s3_bucket,
     "upload_copy_to_local": upload_copy_to_local_to_s3_bucket,
+    "upload_jar": upload_jar_to_s3_bucket,
     "launch_emr": launch_emr_cluster,
     "copy_to_local": run_copy_to_local_step,
     "mapreduce": run_mapreduce,

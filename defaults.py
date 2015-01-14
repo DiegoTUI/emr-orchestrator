@@ -22,10 +22,12 @@ emr_status_wait = 20
 step_status_wait = 20
 emr_cluster_name = "suppliers-integration-emr"
 cluster_id = None
-#cluster_id = "j-H7JKC5J2V51R"
-# Streaming step
+step_type = "streaming"
+# Streaming/Jar step
 step_id = None
 step_name = "TestStep"
+step_jar_path = "s3n://" + bucket_name + scripts_remote_path + "mr.jar"
+step_jar_class_name = "MapReduce"
 step_mapper_script = "mapper.py"
 step_mapper = "s3n://" + bucket_name + scripts_remote_path + step_mapper_script
 step_copy_to_local_script = "copy_to_local.sh"
