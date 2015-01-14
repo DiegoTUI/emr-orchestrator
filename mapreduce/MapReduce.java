@@ -60,6 +60,7 @@ public class MapReduce {
 
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
+        conf.set("mapreduce.job.maps", "54");
         Job job = new Job(conf, "Mapper_Only_Job");
      
         job.setJarByClass(MapReduce.class);
