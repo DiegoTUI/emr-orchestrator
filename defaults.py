@@ -15,13 +15,13 @@ output_remote_path = "/output/"
 ec2_keypair_name = "innovationLab"
 master_type = "m3.xlarge"
 slave_type = "m1.large"
-num_instances = 10
+num_instances = 4
 ami_version = "3.3.1"
 log_dir = "/logs"
 emr_status_wait = 20
 step_status_wait = 20
 emr_cluster_name = "suppliers-integration-emr"
-cluster_id = None
+cluster_id = "j-33JN3IEZPH3M5"
 step_type = "streaming"
 # Streaming/Jar step
 step_id = None

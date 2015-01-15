@@ -14,6 +14,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 
 public class MapReduce {
@@ -21,6 +22,10 @@ public class MapReduce {
     public static class Map extends Mapper<Object, Text, Text, Text> {
 
         public void map(Object key, Text value, Context context) {
+            String regex = new String("^\\d{2}/\\d{2}/\\d{4}\\s\\S+\\|\\d+\\|AVA.*");
+            if (!value.toString().matches(regex)) {
+                return;
+            }
             String[] items = value.toString().split("\\|");
             SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy");
             if(items.length == 15) {
@@ -58,9 +63,12 @@ public class MapReduce {
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        Configuration conf = new Configuration();
-        conf.set("mapreduce.job.maps", "54");
+    public static void main(String[] rawArgs) throws Exception {
+        GenericOptionsParser parser = new GenericOptionsParser(rawArgs);
+        Configuration conf = parser.getConfiguration();
+        String[] args = parser.getRemainingArgs();
+        //Configuration conf = new Configuration();
+        //conf.set("mapreduce.job.maps", "54");
         Job job = new Job(conf, "Mapper_Only_Job");
      
         job.setJarByClass(MapReduce.class);
