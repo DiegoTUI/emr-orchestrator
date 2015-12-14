@@ -2,8 +2,8 @@
 
 # AWS credentials
 region_name = "eu-west-1"
-access_key = "AKIAIDTHFEIDNEQKB4TA"
-secret_key = "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"
+access_key = "ACCESS_KEY_HERE"
+secret_key = "SECRET_KEY_HERE"
 
 # S3
 bucket_name = "tuiinnovation-emr"
